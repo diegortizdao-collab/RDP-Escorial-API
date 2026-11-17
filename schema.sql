@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS rdp_usuarios (
   activo   BOOLEAN NOT NULL DEFAULT TRUE,
   ts       BIGINT NOT NULL
 );
+ALTER TABLE rdp_usuarios ADD COLUMN IF NOT EXISTS foto TEXT NOT NULL DEFAULT '';   -- data URL reducida (≤ 60 KB)
 
 -- ───────── Matriz de costos (versionada) ─────────
 CREATE TABLE IF NOT EXISTS rdp_matriz (

@@ -65,7 +65,7 @@ async function authenticate(req, env, sql) {
     if (!safeEqual(req.headers.get("X-App-Key") || "", key)) throw HTTP(401, "clave de la app incorrecta");
     email = str(req.headers.get("X-User-Email"), 200).toLowerCase();
   }
-  const [u] = await sql`SELECT email, nombre, apellido, area, rol FROM rdp_usuarios WHERE email = ${email} AND activo`;
+  const [u] = await sql`SELECT email, nombre, apellido, area, rol, foto FROM rdp_usuarios WHERE email = ${email} AND activo`;
   if (!u) throw HTTP(403, "usuario no habilitado en la plataforma");
   return u;
 }
@@ -191,7 +191,7 @@ export default {
                 COALESCE((SELECT json_agg(json_build_object('desde', v.desde, 'costo', v.costo) ORDER BY v.desde DESC)
                           FROM rdp_matriz_ver v WHERE v.matriz_id = m.id), '[]'::json) AS versiones
               FROM rdp_matriz m ORDER BY m.concepto`,
-          sql`SELECT email, nombre, apellido, area, rol, activo FROM rdp_usuarios ORDER BY apellido, nombre`,
+          sql`SELECT email, nombre, apellido, area, rol, activo, foto FROM rdp_usuarios ORDER BY apellido, nombre`,
         ]);
         return json({ me: u, areas: areas.map((a) => a.nombre), estructura, matriz, usuarios, mudas: MUDAS });
       }
@@ -408,6 +408,18 @@ export default {
             env.APP_URL || "", "Ingresar")).catch(() => {}));
         log("alta", "usuario", { email, rol });
         return json({ ok: true }, 201);
+      }
+      if ((m = at(/^\/usuarios\/([^/]+)\/foto$/)) && M === "PUT") {
+        // La foto la puede cambiar el propio usuario o un administrador. Llega ya reducida (data URL, máx. ~60 KB).
+        const email = m[0].toLowerCase();
+        if (email !== u.email && !isAdmin(u)) throw HTTP(403, "solo podés cambiar tu propia foto");
+        const b = await body();
+        const foto = String(b.foto ?? "");
+        if (foto && (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(foto) || foto.length > 60000)) throw HTTP(400, "foto inválida o demasiado pesada (máx. 60 KB)");
+        const r = await sql`UPDATE rdp_usuarios SET foto = ${foto} WHERE email = ${email} RETURNING email`;
+        if (!r.length) throw HTTP(404, "usuario inexistente");
+        log("foto", "usuario", { email, quita: !foto });
+        return json({ ok: true });
       }
       if ((m = at(/^\/usuarios\/([^/]+)$/)) && M === "PATCH") {
         needAdmin(u);

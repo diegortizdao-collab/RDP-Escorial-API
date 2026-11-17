@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 /* ───────────── utilidades ───────────── */
 const HERR = ["A3", "A4", "5PQ"];
 const TIPOS = ["Contención", "Contramedida", "Estandarización", "Yokoten"];
+const PLANTAS = ["Suipacha", "25 de Mayo", "Ambas", "Sin planta"];
 const MUDAS = ["Defectos", "Esperar", "Movimientos", "Traslados", "Sobreproducción", "Sobreproceso", "Inventario", "Ambiente", "Seguridad"];
 const ROLES = ["Administrador", "Usuario"];
 
@@ -171,7 +172,7 @@ export default {
         return sql`INSERT INTO rdp_perdida (rdp_id, modo, concepto, unidad, costo_unit, cant_antes, fuente, por, ts)
           VALUES (${rdpId}, 'libre', ${concepto}, ${unidad}, ${costo}, ${cant}, ${fuente}, ${u.email}, ${Date.now()})`;
       };
-      const RDP_SQL = `SELECT r.id, r.titulo, r.planta, r.uet, r.sector, r.herramienta, r.paso, r.cerrado, r.origen, r.origen_detalle, r.muda,
+      const RDP_SQL = `SELECT r.id, r.titulo, r.gerencia, r.area, r.sector, r.planta, r.herramienta, r.paso, r.cerrado, r.origen, r.origen_detalle, r.muda,
           r.prioridad, r.justificacion, r.lider_email, r.indicador_unidad, r.linea_base, r.meta, r.actual,
           r.inicio::text AS inicio, r.cierre::text AS cierre, r.creado_por, r.ts,
           i.perdida_base, i.ahorro_proy, i.ahorro_real, i.inversion,
@@ -186,14 +187,14 @@ export default {
       if (path === "/bootstrap" && M === "GET") {
         const [areas, estructura, matriz, usuarios] = await Promise.all([
           sql`SELECT nombre FROM rdp_areas ORDER BY nombre`,
-          sql`SELECT planta, uet, sector FROM rdp_estructura ORDER BY planta, uet, sector`,
+          sql`SELECT gerencia, area, sector FROM rdp_estructura ORDER BY gerencia, area, sector`,
           sql`SELECT m.id, m.concepto, m.unidad, m.fuente, m.activo,
                 COALESCE((SELECT json_agg(json_build_object('desde', v.desde, 'costo', v.costo) ORDER BY v.desde DESC)
                           FROM rdp_matriz_ver v WHERE v.matriz_id = m.id), '[]'::json) AS versiones
               FROM rdp_matriz m ORDER BY m.concepto`,
           sql`SELECT email, nombre, apellido, area, rol, activo, foto FROM rdp_usuarios ORDER BY apellido, nombre`,
         ]);
-        return json({ me: u, areas: areas.map((a) => a.nombre), estructura, matriz, usuarios, mudas: MUDAS });
+        return json({ me: u, areas: areas.map((a) => a.nombre), estructura, plantas: PLANTAS, matriz, usuarios, mudas: MUDAS });
       }
 
       /* ── RDP ── */
@@ -202,9 +203,10 @@ export default {
         const b = await body();
         const titulo = str(b.titulo, 200), herramienta = b.herramienta;
         if (!titulo || !HERR.includes(herramienta)) throw HTTP(400, "título y herramienta (A3, A4 o 5PQ) son obligatorios");
-        const planta = str(b.planta, 60), uet = str(b.uet, 60), sector = str(b.sector, 80);
-        const [ok] = await sql`SELECT 1 AS x FROM rdp_estructura WHERE planta = ${planta} AND uet = ${uet} AND sector = ${sector}`;
-        if (!ok) throw HTTP(400, "planta / UET / sector inexistente");
+        const gerencia = str(b.gerencia, 100), area = str(b.area, 100), sector = str(b.sector, 80), planta = str(b.planta, 20);
+        if (!PLANTAS.includes(planta)) throw HTTP(400, "planta inválida (Suipacha, 25 de Mayo, Ambas o Sin planta)");
+        const [ok] = await sql`SELECT 1 AS x FROM rdp_estructura WHERE gerencia = ${gerencia} AND area = ${area} AND sector = ${sector}`;
+        if (!ok) throw HTTP(400, "gerencia / área / sector inexistente");
         const lider = str(b.lider_email || u.email, 200).toLowerCase();
         const [lu] = await sql`SELECT 1 AS x FROM rdp_usuarios WHERE email = ${lider} AND activo`;
         if (!lu) throw HTTP(400, "el líder no es un usuario habilitado");
@@ -213,9 +215,9 @@ export default {
         const perdidas = Array.isArray(b.perdidas) ? b.perdidas.slice(0, 30) : [];
         const qs = [];
         const [{ id }] = await sql`SELECT 'RDP-' || lpad(nextval('rdp_seq')::text, 3, '0') AS id`;
-        qs.push(sql`INSERT INTO rdp (id, titulo, planta, uet, sector, herramienta, paso, origen, origen_detalle, muda, prioridad, justificacion,
+        qs.push(sql`INSERT INTO rdp (id, titulo, gerencia, area, sector, planta, herramienta, paso, origen, origen_detalle, muda, prioridad, justificacion,
             lider_email, indicador_unidad, linea_base, meta, actual, inicio, creado_por, ts)
-          VALUES (${id}, ${titulo}, ${planta}, ${uet}, ${sector}, ${herramienta}, 1, ${str(b.origen, 60) || "Indicador"},
+          VALUES (${id}, ${titulo}, ${gerencia}, ${area}, ${sector}, ${planta}, ${herramienta}, 1, ${str(b.origen, 60) || "Indicador"},
             ${JSON.stringify(b.origen_detalle || {})}::jsonb, ${muda}, ${JSON.stringify(b.prioridad || {})}::jsonb, ${str(b.justificacion, 600)},
             ${lider}, ${str(b.indicador_unidad, 60)}, ${num(b.linea_base)}, ${num(b.meta)}, ${num(b.linea_base)},
             ${isDate(b.inicio) ? b.inicio : hoy}, ${u.email}, ${Date.now()})`);
@@ -481,9 +483,9 @@ export default {
       if (path === "/estructura" && M === "POST") {
         needAdmin(u);
         const b = await body();
-        const planta = str(b.planta, 60), uet = str(b.uet, 60), sector = str(b.sector, 80);
-        if (!planta || !uet || !sector) throw HTTP(400, "planta, UET y sector son obligatorios");
-        await sql`INSERT INTO rdp_estructura (planta, uet, sector) VALUES (${planta}, ${uet}, ${sector}) ON CONFLICT DO NOTHING`;
+        const gerencia = str(b.gerencia, 100), area = str(b.area, 100), sector = str(b.sector, 80);
+        if (!gerencia || !area) throw HTTP(400, "gerencia y área son obligatorias (el sector es opcional)");
+        await sql`INSERT INTO rdp_estructura (gerencia, area, sector) VALUES (${gerencia}, ${area}, ${sector}) ON CONFLICT DO NOTHING`;
         return json({ ok: true }, 201);
       }
       if (path === "/admin/correo" && M === "GET") {

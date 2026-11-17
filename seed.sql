@@ -7,13 +7,49 @@ INSERT INTO rdp_areas (nombre) VALUES
  ('UET 1'),('UET 2'),('UET 3'),('UET 4'),('UET 5')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO rdp_estructura (planta, uet, sector) VALUES
- ('Suipacha','UET 4','Armado Gas'),('Suipacha','UET 4','Armado Eléctrico'),('Suipacha','UET 4','Calefones'),('Suipacha','UET 4','Soldadura'),
- ('Suipacha','UET 5','Pintura'),('Suipacha','UET 5','Prensa'),('Suipacha','Matricería','Matricería'),('Suipacha','Mantenimiento','Mantenimiento'),
- ('25 de Mayo','UET 1','Cocinas'),('25 de Mayo','UET 1','Prearmado'),
- ('25 de Mayo','UET 2','Welding'),('25 de Mayo','UET 2','Enlozado'),('25 de Mayo','UET 2','Gema'),
- ('25 de Mayo','UET 3','Corte'),('25 de Mayo','UET 3','Estampado'),
- ('25 de Mayo','Matricería','Matricería'),('25 de Mayo','Mantenimiento','Mantenimiento')
+-- Estructura: Gerencia > Área > Sector (organigrama de Escorial). Planta va aparte en cada RDP.
+INSERT INTO rdp_estructura (gerencia, area, sector) VALUES
+ ('Industrial','UET 1','Cocinas'),
+ ('Industrial','UET 1','Prearmado'),
+ ('Industrial','UET 2','Welding'),
+ ('Industrial','UET 2','Enlozado'),
+ ('Industrial','UET 2','Gema'),
+ ('Industrial','UET 3','Corte'),
+ ('Industrial','UET 3','Estampado'),
+ ('Industrial','UET 4','Armado Gas'),
+ ('Industrial','UET 4','Armado Eléctrico'),
+ ('Industrial','UET 4','Calefones'),
+ ('Industrial','UET 4','Soldadura'),
+ ('Industrial','UET 5','Pintura'),
+ ('Industrial','UET 5','Prensa'),
+ ('Industrial','Mantenimiento 25 de Mayo',''),
+ ('Industrial','Mantenimiento Suipacha',''),
+ ('Industrial','Moldes y Matrices',''),
+ ('Industrial','Mejora Continua',''),
+ ('Calidad, Seguridad, Higiene y Medio Ambiente','Seguridad, Higiene y Medio Ambiente',''),
+ ('Calidad, Seguridad, Higiene y Medio Ambiente','Aseguramiento de Calidad',''),
+ ('Supply Chain','Programación y Control de Producción',''),
+ ('Supply Chain','Logística','Expedición'),
+ ('Supply Chain','Almacén',''),
+ ('Supply Chain','Compras',''),
+ ('RRHH, Administración y Sistemas','Sistemas',''),
+ ('RRHH, Administración y Sistemas','Recursos Humanos',''),
+ ('RRHH, Administración y Sistemas','Contaduría',''),
+ ('RRHH, Administración y Sistemas','Tesorería',''),
+ ('RRHH, Administración y Sistemas','Cuentas Corrientes y Cobranzas',''),
+ ('RRHH, Administración y Sistemas','Créditos',''),
+ ('RRHH, Administración y Sistemas','Seguridad Patrimonial',''),
+ ('Ventas','Ventas',''),
+ ('Ventas','Marketing',''),
+ ('Ventas','Producto',''),
+ ('Ventas','Key Account',''),
+ ('Post Venta','Servicio Post Venta',''),
+ ('Post Venta','Ingeniería de Producto',''),
+ ('Post Venta','Call Center',''),
+ ('Proyectos','Proyectos',''),
+ ('Mecanizado e Inyección','Mecanizado e Inyección',''),
+ ('Mantenimiento Edilicio 25 de Mayo','Mantenimiento Edilicio 25 de Mayo',''),
+ ('Ingeniería e Innovación','Ingeniería e Innovación','')
 ON CONFLICT DO NOTHING;
 
 -- Primer administrador

@@ -4,9 +4,16 @@
 CREATE TABLE IF NOT EXISTS rdp_areas (
   nombre TEXT PRIMARY KEY
 );
-CREATE TABLE IF NOT EXISTS rdp_estructura (            -- Planta > UET > Sector (segmentadores del dashboard)
-  planta TEXT NOT NULL, uet TEXT NOT NULL, sector TEXT NOT NULL,
-  PRIMARY KEY (planta, uet, sector)
+-- Estructura de la organización: Gerencia > Área (jefatura / UET) > Sector (opcional, '' = sin sector).
+-- La planta NO es parte de la jerarquía: es un dato aparte de cada RDP (Suipacha | 25 de Mayo | Ambas | Sin planta).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rdp_estructura' AND column_name = 'planta') THEN
+    DROP TABLE rdp_estructura;     -- estructura anterior Planta > UET > Sector (era solo un catálogo)
+  END IF;
+END $$;
+CREATE TABLE IF NOT EXISTS rdp_estructura (
+  gerencia TEXT NOT NULL, area TEXT NOT NULL, sector TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (gerencia, area, sector)
 );
 
 -- ───────── Usuarios (dos roles) ─────────
@@ -44,9 +51,10 @@ CREATE SEQUENCE IF NOT EXISTS rdp_seq;
 CREATE TABLE IF NOT EXISTS rdp (
   id               TEXT PRIMARY KEY,                  -- RDP-001
   titulo           TEXT NOT NULL,
-  planta           TEXT NOT NULL,
-  uet              TEXT NOT NULL,
-  sector           TEXT NOT NULL,
+  gerencia         TEXT NOT NULL DEFAULT '',
+  area             TEXT NOT NULL DEFAULT '',
+  sector           TEXT NOT NULL DEFAULT '',
+  planta           TEXT NOT NULL DEFAULT 'Sin planta' CHECK (planta IN ('Suipacha','25 de Mayo','Ambas','Sin planta')),
   herramienta      TEXT NOT NULL CHECK (herramienta IN ('A3','A4','5PQ')),
   paso             SMALLINT NOT NULL DEFAULT 1 CHECK (paso BETWEEN 0 AND 8),   -- 0-5 = P · 6 = D · 7 = C · 8 = A
   cerrado          BOOLEAN NOT NULL DEFAULT FALSE,
@@ -65,7 +73,16 @@ CREATE TABLE IF NOT EXISTS rdp (
   creado_por       TEXT NOT NULL,
   ts               BIGINT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS rdp_loc_idx ON rdp (planta, uet, sector);
+-- Migración desde el esquema anterior (columna uet → area; gerencia nueva)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rdp' AND column_name = 'uet') THEN
+    ALTER TABLE rdp RENAME COLUMN uet TO area;
+  END IF;
+END $$;
+ALTER TABLE rdp ADD COLUMN IF NOT EXISTS gerencia TEXT NOT NULL DEFAULT '';
+DROP INDEX IF EXISTS rdp_loc_idx;
+CREATE INDEX IF NOT EXISTS rdp_loc_idx ON rdp (gerencia, area, sector);
+CREATE INDEX IF NOT EXISTS rdp_planta_idx ON rdp (planta);
 CREATE INDEX IF NOT EXISTS rdp_paso_idx ON rdp (paso);
 
 -- Contenido de cada paso/subpaso del A3, A4 o 5PQ (los campos del formato FR-MCO) como JSON

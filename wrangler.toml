@@ -1,0 +1,24 @@
+name = "rdp-escorial-api"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+# No borrar las variables/secretos cargados en el panel al desplegar desde GitHub
+keep_vars = true
+
+[vars]
+# Origen permitido (GitHub Pages). Sin barra final.
+ALLOWED_ORIGIN = "https://diegortizdao-collab.github.io"
+# URL pública de la app (se usa en los links de los correos)
+APP_URL = "https://diegortizdao-collab.github.io/RDP-Escorial/"
+# Autenticación: "pilot" (clave compartida + email, solo para pruebas) | "entra" (Microsoft Entra ID, producción)
+AUTH_MODE = "pilot"
+# Correo por Microsoft Graph: "0" apagado (los mensajes quedan en la bandeja de salida rdp_correo) | "1" encendido
+MAIL_ENABLED = "0"
+MAIL_FROM = ""            # buzón remitente, ej.: rdp@escorial.com.ar
+ENTRA_TENANT_ID = ""      # Directory (tenant) ID de Escorial
+ENTRA_CLIENT_ID = ""      # Application (client) ID de la app registrada
+MS_CLIENT_ID = ""         # normalmente el mismo client id
+
+# Secretos (no van en este archivo):
+#   NEON_URL        connection string de Neon
+#   APP_KEY         clave compartida del modo "pilot"
+#   MS_CLIENT_SECRET secreto de la app registrada (solo para enviar correo)

@@ -175,6 +175,7 @@ export default {
           r.prioridad, r.justificacion, r.lider_email, r.indicador_unidad, r.linea_base, r.meta, r.actual,
           r.inicio::text AS inicio, r.cierre::text AS cierre, r.creado_por, r.ts,
           i.perdida_base, i.ahorro_proy, i.ahorro_real, i.inversion,
+          (SELECT max(fecha)::text FROM rdp_medicion WHERE rdp_id = r.id) AS ultima_medicion,
           COALESCE((SELECT json_agg(row_to_json(p) ORDER BY p.id) FROM rdp_perdida p WHERE p.rdp_id = r.id), '[]'::json) AS perdidas,
           COALESCE((SELECT json_agg(row_to_json(a) ORDER BY a.n) FROM rdp_accion_v a WHERE a.rdp_id = r.id), '[]'::json) AS acciones
         FROM rdp r JOIN rdp_impacto_v i ON i.id = r.id`;

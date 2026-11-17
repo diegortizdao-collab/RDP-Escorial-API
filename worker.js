@@ -60,8 +60,8 @@ async function authenticate(req, env, sql) {
   if ((env.AUTH_MODE || "pilot") === "entra") {
     email = await verifyEntra((req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, ""), env);
   } else {
-    const key = await secret(env.APP_KEY);
-    if (!key) throw HTTP(503, "APP_KEY no está configurada en el Worker");
+    const key = await secret(env.RDPESC_APP_KEY);
+    if (!key) throw HTTP(503, "RDPESC_APP_KEY no está configurada en el Worker");
     if (!safeEqual(req.headers.get("X-App-Key") || "", key)) throw HTTP(401, "clave de la app incorrecta");
     email = str(req.headers.get("X-User-Email"), 200).toLowerCase();
   }
@@ -79,7 +79,7 @@ async function graphToken(env) {
   if (GT.v && Date.now() < GT.t) return GT.v;
   const body = new URLSearchParams({
     client_id: env.MS_CLIENT_ID || env.ENTRA_CLIENT_ID,
-    client_secret: await secret(env.MS_CLIENT_SECRET),
+    client_secret: await secret(env.RDPESC_MS_SECRET),
     scope: "https://graph.microsoft.com/.default",
     grant_type: "client_credentials",
   });
@@ -137,8 +137,8 @@ export default {
     try {
       if (path === "/" && M === "GET") return json({ ok: true, name: "rdp-escorial-api", auth: env.AUTH_MODE || "pilot", mail: env.MAIL_ENABLED === "1" });
 
-      const dbUrl = await secret(env.NEON_URL);
-      if (!dbUrl.startsWith("postgres")) throw HTTP(500, "NEON_URL no contiene una cadena postgresql:// válida");
+      const dbUrl = await secret(env.RDPESC_NEON_URL);
+      if (!dbUrl.startsWith("postgres")) throw HTTP(500, "RDPESC_NEON_URL no contiene una cadena postgresql:// válida");
       const sql = neon(dbUrl);
       const u = await authenticate(req, env, sql);
       const log = (accion, entidad, detalle = {}) =>

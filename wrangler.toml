@@ -19,6 +19,6 @@ ENTRA_CLIENT_ID = ""      # Application (client) ID de la app registrada
 MS_CLIENT_ID = ""         # normalmente el mismo client id
 
 # Secretos (no van en este archivo):
-#   NEON_URL        connection string de Neon
-#   APP_KEY         clave compartida del modo "pilot"
-#   MS_CLIENT_SECRET secreto de la app registrada (solo para enviar correo)
+#   RDPESC_NEON_URL      connection string de Neon
+#   RDPESC_APP_KEY         clave compartida del modo "pilot"
+#   RDPESC_MS_SECRET secreto de la app registrada (solo para enviar correo)

@@ -39,7 +39,7 @@ Mismo patrón que `Evaluacion-RDP-API` y `PlanillasdeControlAPI`.
    El seed carga las 29 áreas, la estructura de plantas, el primer administrador (`dortiz@escorial.com.ar`) y la matriz de costos
    migrada de Kaizenio — **reemplazar con la matriz oficial de Escorial**.
 2. **Cloudflare** (Workers & Pages → Import a repository → `RDP-Escorial-API`): nombre `rdp-escorial-api`.
-3. Secretos (Settings → Variables and secrets): `NEON_URL` y `APP_KEY` (modo piloto).
+3. Secretos (Settings → Variables and secrets): `RDPESC_NEON_URL` y `RDPESC_APP_KEY` (modo piloto).
 4. Copiar la URL del Worker a `config.js` → `API_URL` en el repo `RDP-Escorial`.
 
 ## Autenticación
@@ -54,7 +54,7 @@ Se envía con Microsoft Graph (`sendMail`) desde un buzón de Escorial. Hasta qu
 mensajes quedan en `rdp_correo` como *pendiente* (nada se pierde). Pedido a IT:
 1. Buzón remitente (`MAIL_FROM`, ej. `rdp@escorial.com.ar`).
 2. App registrada en Entra ID con permiso de aplicación `Mail.Send` **restringido a ese buzón** (Application Access Policy);
-   pasar `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` y el secreto → `MS_CLIENT_SECRET`.
+   pasar `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` y el secreto → `RDPESC_MS_SECRET`.
 3. La misma app sirve para el inicio de sesión (`AUTH_MODE="entra"`, redirect URI = la URL de GitHub Pages).
 
 Con eso: `MAIL_ENABLED="1"` y, desde un administrador, `POST /admin/correo/reintentar` envía lo acumulado.

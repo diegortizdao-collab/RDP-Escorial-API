@@ -399,7 +399,7 @@ export default {
       }
       if ((m = at(/^\/acciones\/(\d+)$/))) {
         const [aid] = m;
-        const [a] = await sql`SELECT a.*, r.lider_email, r.creado_por FROM rdp_accion a JOIN rdp r ON r.id = a.rdp_id WHERE a.id = ${aid}`;
+        const [a] = await sql`SELECT a.*, a.inicio::text AS inicio_t, a.compromiso::text AS compromiso_t, r.lider_email, r.creado_por FROM rdp_accion a JOIN rdp r ON r.id = a.rdp_id WHERE a.id = ${aid}`;
         if (!a) throw HTTP(404, "acción inexistente");
         const esResp = a.resp_email === u.email;
         if (!canEdit(u, a) && !esResp) throw HTTP(403, "sin permiso sobre esta acción");
@@ -409,14 +409,30 @@ export default {
           if (avance < 0 || avance > 100) throw HTTP(400, "avance entre 0 y 100");
           // El responsable solo puede informar avance; el resto lo edita quien puede editar el RDP
           if (canEdit(u, a)) {
-            await sql`UPDATE rdp_accion SET avance = ${avance},
+            const ini = isDate(b.inicio) ? b.inicio : a.inicio_t, comp = isDate(b.compromiso) ? b.compromiso : a.compromiso_t;
+            if (comp < ini) throw HTTP(400, "el compromiso no puede ser anterior al inicio");
+            let resp = a.resp_email, ru = null;
+            if (b.resp_email !== undefined && str(b.resp_email, 200).toLowerCase() !== a.resp_email) {
+              resp = str(b.resp_email, 200).toLowerCase();
+              [ru] = await sql`SELECT email, nombre, apellido FROM rdp_usuarios WHERE email = ${resp} AND activo`;
+              if (!ru) throw HTTP(400, "el responsable no es un usuario habilitado");
+            }
+            await sql`UPDATE rdp_accion SET avance = ${avance}, resp_email = ${resp}, inicio = ${ini}, compromiso = ${comp},
+              causa_raiz = ${b.causa_raiz === undefined ? a.causa_raiz : str(b.causa_raiz, 20)},
               texto = ${b.texto === undefined ? a.texto : str(b.texto, 500) || a.texto},
-              compromiso = ${isDate(b.compromiso) ? b.compromiso : a.compromiso},
               inversion = ${b.inversion === undefined ? a.inversion : Math.max(0, num(b.inversion))} WHERE id = ${aid}`;
+            if (ru) { // cambió el responsable: se le avisa al nuevo
+              const [r] = await sql`SELECT id, titulo FROM rdp WHERE id = ${a.rdp_id}`;
+              ctx.waitUntil(correo(env, sql, resp, `[RDP Escorial] Te asignaron una acción: ${a.codigo}`,
+                marco("Tenés una acción asignada",
+                  `<p>Hola ${esc(ru.nombre)},</p><p>${esc(u.nombre)} ${esc(u.apellido)} te asignó una acción en <b>${esc(r.id)} · ${esc(r.titulo)}</b>:</p>
+                   <p style="background:#F5F9FC;border:1px solid #D8E1EB;border-radius:8px;padding:8px 10px"><b>${esc(a.tipo)}:</b> ${esc(b.texto === undefined ? a.texto : str(b.texto, 500))}<br>
+                   <span style="color:#667085">Compromiso: ${esc(comp)}</span></p>`, (env.APP_URL || "") + "#rdp=" + r.id, "Abrir en la plataforma")).catch(() => {}));
+            }
           } else {
             await sql`UPDATE rdp_accion SET avance = ${avance} WHERE id = ${aid}`;
           }
-          log("modificar", "accion", { id: +aid, avance });
+          log("modificar", "accion", { id: +aid, avance_antes: a.avance, avance });
         } else if (M === "DELETE") {
           if (!canEdit(u, a)) throw HTTP(403, "sin permiso para eliminar");
           await sql`DELETE FROM rdp_accion WHERE id = ${aid}`;

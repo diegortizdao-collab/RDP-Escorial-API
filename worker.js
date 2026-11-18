@@ -311,18 +311,37 @@ export default {
       }
       if ((m = at(/^\/perdidas\/(\d+)$/))) {
         const [pid] = m;
-        const [p] = await sql`SELECT p.*, r.lider_email, r.creado_por FROM rdp_perdida p JOIN rdp r ON r.id = p.rdp_id WHERE p.id = ${pid}`;
+        const [p] = await sql`SELECT p.*, r.lider_email, r.creado_por, r.cerrado FROM rdp_perdida p JOIN rdp r ON r.id = p.rdp_id WHERE p.id = ${pid}`;
         if (!p) throw HTTP(404, "pérdida inexistente");
         if (!canEdit(u, p)) throw HTTP(403, "sin permiso para editar este RDP");
+        if (p.cerrado && !isAdmin(u)) throw HTTP(409, "el RDP está cerrado: solo un administrador puede modificar sus pérdidas");
         if (M === "PATCH") {
+          // Se puede corregir en cualquier paso del RDP (p. ej. si la investigación descubre un costo asociado no previsto).
           const b = await body();
           const des = b.cant_despues === null ? null : b.cant_despues === undefined ? p.cant_despues : num(b.cant_despues, -1);
           if (des !== null && des < 0) throw HTTP(400, "cantidad inválida");
-          await sql`UPDATE rdp_perdida SET cant_despues = ${des}, cant_antes = ${b.cant_antes === undefined ? p.cant_antes : num(b.cant_antes)} WHERE id = ${pid}`;
-          log("modificar", "perdida", { id: +pid });
+          const antes = b.cant_antes === undefined ? p.cant_antes : num(b.cant_antes, -1);
+          if (antes < 0) throw HTTP(400, "cantidad inválida");
+          let concepto = p.concepto, unidad = p.unidad, costo = p.costo_unit, vig = p.vigencia, fuente = p.fuente, matriz = p.matriz_id;
+          if (p.modo === "libre") {
+            if (b.concepto !== undefined) concepto = str(b.concepto, 30);
+            if (b.unidad !== undefined) unidad = str(b.unidad, 8) || "U";
+            if (b.costo_unit !== undefined) costo = num(b.costo_unit, -1);
+            if (b.fuente !== undefined) fuente = str(b.fuente, 400);
+            if (!concepto || !(costo >= 0)) throw HTTP(400, "concepto y pérdida unitaria son obligatorios");
+            if (!fuente) throw HTTP(400, "indicá el criterio de cálculo de la pérdida libre");
+          } else if (b.matriz_id !== undefined && +b.matriz_id !== p.matriz_id) {
+            const v = await costoVigente(b.matriz_id, new Date().toISOString().slice(0, 10));
+            matriz = +b.matriz_id; concepto = str(v.concepto, 30); unidad = v.unidad; costo = v.costo; vig = v.desde;
+          }
+          await sql`UPDATE rdp_perdida SET cant_antes = ${antes}, cant_despues = ${des}, concepto = ${concepto}, unidad = ${unidad},
+            costo_unit = ${costo}, vigencia = ${vig}, fuente = ${fuente}, matriz_id = ${matriz} WHERE id = ${pid}`;
+          log("modificar", "perdida", { id: +pid, rdp: p.rdp_id, motivo: str(b.motivo, 300),
+            antes: { concepto: p.concepto, costo: +p.costo_unit, cant: +p.cant_antes, despues: p.cant_despues === null ? null : +p.cant_despues },
+            ahora: { concepto, costo: +costo, cant: +antes, despues: des } });
         } else if (M === "DELETE") {
           await sql`DELETE FROM rdp_perdida WHERE id = ${pid}`;
-          log("eliminar", "perdida", { id: +pid });
+          log("eliminar", "perdida", { id: +pid, rdp: p.rdp_id, motivo: str(url.searchParams.get("motivo"), 300), concepto: p.concepto, cant: +p.cant_antes, costo: +p.costo_unit });
         } else throw HTTP(405, "método no permitido");
         return json((await rdpFull(p.rdp_id))[0]);
       }

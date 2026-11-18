@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS rdp_perdida (
   ts           BIGINT NOT NULL,
   CHECK (modo = 'std' AND matriz_id IS NOT NULL OR modo = 'libre')
 );
+-- Desglose de cómo se llegó a la cantidad anual: {base, factores:[{e:'eventos/año', v:36, t:'x'|'%'}], nota}
+ALTER TABLE rdp_perdida ADD COLUMN IF NOT EXISTS calculo JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS rdp_perdida_idx ON rdp_perdida (rdp_id);
 
 -- Acciones (contención, contramedida, estandarización, yokoten). Sin flujo de aprobación.

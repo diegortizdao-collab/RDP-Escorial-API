@@ -156,21 +156,41 @@ export default {
         if (!v) throw HTTP(400, "el concepto no tiene un costo vigente en la matriz");
         return v;
       };
+      // Desglose del cálculo de la cantidad anual (base × factores). Si hay base, la cantidad se recalcula en el servidor para que no se desfase.
+      const limpiarCalculo = (c, cantDirecta) => {
+        const o = { base: null, factores: [], nota: "" };
+        if (c && typeof c === "object") {
+          o.nota = str(c.nota, 400);
+          if (c.base !== undefined && c.base !== null && c.base !== "") {
+            const base = num(c.base, -1);
+            if (base < 0) throw HTTP(400, "la cantidad base del cálculo es inválida");
+            o.base = base;
+            for (const f of (Array.isArray(c.factores) ? c.factores.slice(0, 4) : [])) {
+              const v = num(f.v, -1);
+              if (v < 0) throw HTTP(400, "un factor del cálculo es inválido");
+              o.factores.push({ e: str(f.e, 40), v, t: f.t === "%" ? "%" : "x" });
+            }
+          }
+        }
+        const cant = o.base === null ? cantDirecta : Math.round(o.factores.reduce((a, f) => a * (f.t === "%" ? f.v / 100 : f.v), o.base) * 100) / 100;
+        return { calculo: o, cant };
+      };
       const insertarPerdida = (rdpId, p, v) => {
         // Devuelve la consulta lista para ejecutar (permite usarla dentro de una transacción)
         const modo = p.modo === "std" ? "std" : "libre";
-        const cant = num(p.cant_antes ?? p.cant);
+        const { calculo, cant } = limpiarCalculo(p.calculo, num(p.cant_antes ?? p.cant));
         if (!(cant >= 0)) throw HTTP(400, "cantidad inválida");
+        const cj = JSON.stringify(calculo);
         if (modo === "std") {
-          return sql`INSERT INTO rdp_perdida (rdp_id, modo, matriz_id, concepto, unidad, costo_unit, vigencia, cant_antes, fuente, por, ts)
-            VALUES (${rdpId}, 'std', ${p.matriz_id}, ${str(v.concepto, 30)}, ${v.unidad}, ${v.costo}, ${v.desde}, ${cant}, 'Matriz de costos', ${u.email}, ${Date.now()})`;
+          return sql`INSERT INTO rdp_perdida (rdp_id, modo, matriz_id, concepto, unidad, costo_unit, vigencia, cant_antes, fuente, calculo, por, ts)
+            VALUES (${rdpId}, 'std', ${p.matriz_id}, ${str(v.concepto, 30)}, ${v.unidad}, ${v.costo}, ${v.desde}, ${cant}, 'Matriz de costos', ${cj}::jsonb, ${u.email}, ${Date.now()})`;
         }
         const concepto = str(p.concepto, 30), unidad = str(p.unidad, 8) || "U", costo = num(p.costo_unit, -1);
         if (!concepto || costo < 0) throw HTTP(400, "concepto y pérdida unitaria son obligatorios en una pérdida libre");
         const fuente = str(p.fuente, 400);
         if (!fuente) throw HTTP(400, "indicá el criterio de cálculo de la pérdida libre");
-        return sql`INSERT INTO rdp_perdida (rdp_id, modo, concepto, unidad, costo_unit, cant_antes, fuente, por, ts)
-          VALUES (${rdpId}, 'libre', ${concepto}, ${unidad}, ${costo}, ${cant}, ${fuente}, ${u.email}, ${Date.now()})`;
+        return sql`INSERT INTO rdp_perdida (rdp_id, modo, concepto, unidad, costo_unit, cant_antes, fuente, calculo, por, ts)
+          VALUES (${rdpId}, 'libre', ${concepto}, ${unidad}, ${costo}, ${cant}, ${fuente}, ${cj}::jsonb, ${u.email}, ${Date.now()})`;
       };
       const RDP_SQL = `SELECT r.id, r.titulo, r.gerencia, r.area, r.sector, r.planta, r.herramienta, r.paso, r.cerrado, r.origen, r.origen_detalle, r.muda,
           r.prioridad, r.justificacion, r.lider_email, r.indicador_unidad, r.linea_base, r.meta, r.actual,
@@ -320,7 +340,9 @@ export default {
           const b = await body();
           const des = b.cant_despues === null ? null : b.cant_despues === undefined ? p.cant_despues : num(b.cant_despues, -1);
           if (des !== null && des < 0) throw HTTP(400, "cantidad inválida");
-          const antes = b.cant_antes === undefined ? p.cant_antes : num(b.cant_antes, -1);
+          let antes = b.cant_antes === undefined ? p.cant_antes : num(b.cant_antes, -1);
+          let calc = p.calculo || {};
+          if (b.calculo !== undefined) { const lc = limpiarCalculo(b.calculo, antes); calc = lc.calculo; antes = lc.cant; }
           if (antes < 0) throw HTTP(400, "cantidad inválida");
           let concepto = p.concepto, unidad = p.unidad, costo = p.costo_unit, vig = p.vigencia, fuente = p.fuente, matriz = p.matriz_id;
           if (p.modo === "libre") {
@@ -335,10 +357,10 @@ export default {
             matriz = +b.matriz_id; concepto = str(v.concepto, 30); unidad = v.unidad; costo = v.costo; vig = v.desde;
           }
           await sql`UPDATE rdp_perdida SET cant_antes = ${antes}, cant_despues = ${des}, concepto = ${concepto}, unidad = ${unidad},
-            costo_unit = ${costo}, vigencia = ${vig}, fuente = ${fuente}, matriz_id = ${matriz} WHERE id = ${pid}`;
+            costo_unit = ${costo}, vigencia = ${vig}, fuente = ${fuente}, matriz_id = ${matriz}, calculo = ${JSON.stringify(calc)}::jsonb WHERE id = ${pid}`;
           log("modificar", "perdida", { id: +pid, rdp: p.rdp_id, motivo: str(b.motivo, 300),
-            antes: { concepto: p.concepto, costo: +p.costo_unit, cant: +p.cant_antes, despues: p.cant_despues === null ? null : +p.cant_despues },
-            ahora: { concepto, costo: +costo, cant: +antes, despues: des } });
+            antes: { concepto: p.concepto, costo: +p.costo_unit, cant: +p.cant_antes, despues: p.cant_despues === null ? null : +p.cant_despues, calculo: p.calculo },
+            ahora: { concepto, costo: +costo, cant: +antes, despues: des, calculo: calc } });
         } else if (M === "DELETE") {
           await sql`DELETE FROM rdp_perdida WHERE id = ${pid}`;
           log("eliminar", "perdida", { id: +pid, rdp: p.rdp_id, motivo: str(url.searchParams.get("motivo"), 300), concepto: p.concepto, cant: +p.cant_antes, costo: +p.costo_unit });

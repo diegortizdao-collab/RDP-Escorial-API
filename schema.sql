@@ -80,6 +80,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 ALTER TABLE rdp ADD COLUMN IF NOT EXISTS gerencia TEXT NOT NULL DEFAULT '';
+ALTER TABLE rdp ADD COLUMN IF NOT EXISTS equipo JSONB NOT NULL DEFAULT '[]'::jsonb;  -- miembros: [{e: email|'', n: nombre, r: función}]
 DROP INDEX IF EXISTS rdp_loc_idx;
 CREATE INDEX IF NOT EXISTS rdp_loc_idx ON rdp (gerencia, area, sector);
 CREATE INDEX IF NOT EXISTS rdp_planta_idx ON rdp (planta);

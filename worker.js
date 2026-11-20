@@ -192,8 +192,28 @@ export default {
         return sql`INSERT INTO rdp_perdida (rdp_id, modo, concepto, unidad, costo_unit, cant_antes, fuente, calculo, por, ts)
           VALUES (${rdpId}, 'libre', ${concepto}, ${unidad}, ${costo}, ${cant}, ${fuente}, ${cj}::jsonb, ${u.email}, ${Date.now()})`;
       };
+      // Equipo del RDP: miembros del directorio (email) o personas sin usuario (solo nombre)
+      const limpiarEquipo = async (arr) => {
+        if (!Array.isArray(arr)) throw HTTP(400, "equipo inválido");
+        const out = [], vistos = new Set();
+        for (const m of arr.slice(0, 15)) {
+          const e = str(m && m.e, 200).toLowerCase(), r = str(m && m.r, 60);
+          let n = str(m && m.n, 80);
+          if (e) {
+            const [x] = await sql`SELECT nombre, apellido FROM rdp_usuarios WHERE email = ${e} AND activo`;
+            if (!x) throw HTTP(400, "miembro del equipo sin usuario habilitado: " + e);
+            n = (x.nombre + " " + x.apellido).trim();
+          }
+          if (!n) continue;
+          const k = e || n.toLowerCase();
+          if (vistos.has(k)) continue;
+          vistos.add(k);
+          out.push({ e, n, r });
+        }
+        return out;
+      };
       const RDP_SQL = `SELECT r.id, r.titulo, r.gerencia, r.area, r.sector, r.planta, r.herramienta, r.paso, r.cerrado, r.origen, r.origen_detalle, r.muda,
-          r.prioridad, r.justificacion, r.lider_email, r.indicador_unidad, r.linea_base, r.meta, r.actual,
+          r.prioridad, r.justificacion, r.lider_email, r.equipo, r.indicador_unidad, r.linea_base, r.meta, r.actual,
           r.inicio::text AS inicio, r.cierre::text AS cierre, r.creado_por, r.ts,
           i.perdida_base, i.ahorro_proy, i.ahorro_real, i.inversion,
           (SELECT max(fecha)::text FROM rdp_medicion WHERE rdp_id = r.id) AS ultima_medicion,
@@ -230,16 +250,17 @@ export default {
         const lider = str(b.lider_email || u.email, 200).toLowerCase();
         const [lu] = await sql`SELECT 1 AS x FROM rdp_usuarios WHERE email = ${lider} AND activo`;
         if (!lu) throw HTTP(400, "el líder no es un usuario habilitado");
+        const equipo = await limpiarEquipo(b.equipo === undefined ? [] : b.equipo);
         const muda = MUDAS.includes(b.muda) ? b.muda : "Defectos";
         const hoy = new Date().toISOString().slice(0, 10);
         const perdidas = Array.isArray(b.perdidas) ? b.perdidas.slice(0, 30) : [];
         const qs = [];
         const [{ id }] = await sql`SELECT 'RDP-' || lpad(nextval('rdp_seq')::text, 3, '0') AS id`;
         qs.push(sql`INSERT INTO rdp (id, titulo, gerencia, area, sector, planta, herramienta, paso, origen, origen_detalle, muda, prioridad, justificacion,
-            lider_email, indicador_unidad, linea_base, meta, actual, inicio, creado_por, ts)
+            lider_email, equipo, indicador_unidad, linea_base, meta, actual, inicio, creado_por, ts)
           VALUES (${id}, ${titulo}, ${gerencia}, ${area}, ${sector}, ${planta}, ${herramienta}, 1, ${str(b.origen, 60) || "Indicador"},
             ${JSON.stringify(b.origen_detalle || {})}::jsonb, ${muda}, ${JSON.stringify(b.prioridad || {})}::jsonb, ${str(b.justificacion, 600)},
-            ${lider}, ${str(b.indicador_unidad, 60)}, ${num(b.linea_base)}, ${num(b.meta)}, ${num(b.linea_base)},
+            ${lider}, ${JSON.stringify(equipo)}::jsonb, ${str(b.indicador_unidad, 60)}, ${num(b.linea_base)}, ${num(b.meta)}, ${num(b.linea_base)},
             ${isDate(b.inicio) ? b.inicio : hoy}, ${u.email}, ${Date.now()})`);
         for (const p of perdidas) {
           const v = p.modo === "std" ? await costoVigente(p.matriz_id, hoy) : null;
@@ -272,6 +293,7 @@ export default {
           if (!HERR.includes(herr)) throw HTTP(400, "herramienta inválida");
           const lider = b.lider_email === undefined ? r.lider_email : str(b.lider_email, 200).toLowerCase();
           const cerrado = b.cerrado === undefined ? r.cerrado : !!b.cerrado;
+          const equipo = b.equipo === undefined ? null : await limpiarEquipo(b.equipo);
           await sql`UPDATE rdp SET titulo = ${b.titulo === undefined ? r.titulo : str(b.titulo, 200) || r.titulo},
               paso = ${paso}, herramienta = ${herr}, lider_email = ${lider}, cerrado = ${cerrado},
               cierre = CASE WHEN ${cerrado}::boolean THEN COALESCE(cierre, CURRENT_DATE) ELSE NULL END,
@@ -279,15 +301,18 @@ export default {
               indicador_unidad = ${b.indicador_unidad === undefined ? r.indicador_unidad : str(b.indicador_unidad, 60)},
               linea_base = ${b.linea_base === undefined ? r.linea_base : num(b.linea_base)},
               meta = ${b.meta === undefined ? r.meta : num(b.meta)},
-              justificacion = ${b.justificacion === undefined ? r.justificacion : str(b.justificacion, 600)}
+              justificacion = ${b.justificacion === undefined ? r.justificacion : str(b.justificacion, 600)},
+              equipo = COALESCE(${equipo === null ? null : JSON.stringify(equipo)}::jsonb, equipo)
             WHERE id = ${id}`;
           log("modificar", "rdp", { id, paso, herramienta: herr, cerrado });
           return json((await rdpFull(id))[0]);
         }
         if (M === "DELETE") {
           needAdmin(u);
+          const [ex] = await sql`SELECT titulo FROM rdp WHERE id = ${id}`;
+          if (!ex) throw HTTP(404, "RDP inexistente");
           await sql`DELETE FROM rdp WHERE id = ${id}`;
-          log("eliminar", "rdp", { id });
+          log("eliminar", "rdp", { id, titulo: ex.titulo });
           return json({ ok: true });
         }
       }

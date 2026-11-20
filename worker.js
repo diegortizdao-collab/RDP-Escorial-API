@@ -302,7 +302,8 @@ export default {
               linea_base = ${b.linea_base === undefined ? r.linea_base : num(b.linea_base)},
               meta = ${b.meta === undefined ? r.meta : num(b.meta)},
               justificacion = ${b.justificacion === undefined ? r.justificacion : str(b.justificacion, 600)},
-              equipo = COALESCE(${equipo === null ? null : JSON.stringify(equipo)}::jsonb, equipo)
+              equipo = COALESCE(${equipo === null ? null : JSON.stringify(equipo)}::jsonb, equipo),
+              inicio = COALESCE(${isDate(b.inicio) ? b.inicio : null}::date, inicio)
             WHERE id = ${id}`;
           log("modificar", "rdp", { id, paso, herramienta: herr, cerrado });
           return json((await rdpFull(id))[0]);
